@@ -167,7 +167,7 @@ code.highlighter-rouge {
   border: 1px solid rgba(255, 255, 255, 0.15);
   padding: 0px 3px;
   margin: 0px -3px;
-  color: #aa759f;
+  color: $chelsea-cucumber;
   border-radius: 2px;
 }
 
@@ -270,4 +270,10 @@ a:active, a:focus {
 
 #wrapper {
   min-height: calc(100vh - 100px);
+}
+
+//Strong
+strong {
+  font-weight: bold;
+  color: $conifer;
 }
