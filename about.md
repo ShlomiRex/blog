@@ -3,4 +3,4 @@ layout: page
 title: About
 ---
 
-Something about me.
+My name is Shlomi Domnenko and I like linux.
