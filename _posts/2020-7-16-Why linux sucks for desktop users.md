@@ -1,5 +1,5 @@
 ---
-title: "Why linux sucks for desktop users: Part 1"
+title: "Why linux sucks for desktop users"
 published: true
 layout: post
 ---
