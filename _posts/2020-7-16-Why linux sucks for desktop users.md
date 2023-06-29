@@ -17,7 +17,7 @@ Major applications users interact with are:
 * Taskbar (toolbar / dock)
 * Start / Search (Windows key)
 * Settings
-* Desktop[ customization (too much, too little)
+* Desktop customization (too much, too little)
 * Printers
 * Third-party applications (screen recorder, torrenting, email...)
 * System Monitor (resources, cpu, ram, gpu...)
