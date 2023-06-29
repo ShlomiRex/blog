@@ -25,6 +25,7 @@ plugins:
   - jekyll-seo-tag
   - jekyll-paginate
   - jekyll-sitemap
+  - jekyll-toc
 
 # Custom variables
 owner : "Shlomi Domnenko"

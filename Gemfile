@@ -33,3 +33,6 @@ gem "jekyll-paginate"
 gem "jekyll-sitemap"
 
 gem "webrick"
+
+# custom
+gem 'jekyll-toc'
