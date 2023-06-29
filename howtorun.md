@@ -2,3 +2,10 @@
 
 Then execute:
 `bundle exec jekyll serve`
+
+
+Install gems:
+`bundle install`
+
+Then serve the website with `_drafts` posts:
+`bundle exec jekyll serve --drafts`
