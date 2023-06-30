@@ -16,6 +16,8 @@ Before we start, let me list the most useful resources for OS development:
 - [Writing a Simple Operating System — from Scratch by Nick Blundell](https://www.cs.bham.ac.uk/~exr/lectures/opsys/10_11/lectures/os-dev.pdf)
 - [BIOS Interrupts and Functions](https://ostad.nit.ac.ir/payaidea/ospic/file1615.pdf)
 
+The post is written sequentially, which means it is recommended to read it from top to bottom. The progress is made in the same order as the post, so you can see me actually struggle and get back to previous points.
+
 ## Boot process
 
 The first step is to understand how the computer reaches our kernel code from BIOS.
@@ -156,6 +158,83 @@ Now we want to read different sectors of our code. Since 512 bytes isn't enough,
 
 The first sector will be regular bootsector code, and the second sector will be filled with 0xFF bytes. The first sector will read 16 bytes of the second sector and print it to the screen.
 
+![](/assets/2023-6/Screenshot 2023-06-30 at 20.52.48.png)
+
+The picture above shows how to read the second sector. In the bootloader sector (first sector) we have the code to read the second sector.
+
+The second sector is filled with 'A' bytes, and then we print it to the screen.
+
+Note: the disk number is stored in DL register right after the BIOS loads the bootloader. We save it in a variable called `BOOT_DRIVE`.
+
+The BIOS reads the sector into memory at location `ES:BX` (remember CPU addressing?). We set `ES` to 0, and `BX` to `0x7e00` as a dummy example.
+
+The code:
+
+{% highlight nasm %}
+
+; DL stores the current drive number, save in variable
+    mov [BOOT_DRIVE], dl
+
+    ; Read second sector (512 bytes)
+    xor ax, ax ; Indirectly set ES to 0
+    mov es, ax
+
+    mov ah, 2 ; Read from disk function
+    mov al, 1 ; Number of sectors to be read 
+    mov ch, 0 ; Cylinder number (we in the sane platter)
+    mov cl, 2 ; Sector number (1-63)
+    mov dh, 0 ; Disk side (top, bottom) / Header
+    mov dl, [BOOT_DRIVE] ; Drive number (floppy)
+
+    ; Drive number = es offset by bx = 0x7e00
+    ; es * 16 + bx = 0 + bx = 0x7e00
+    mov bx, 0x7e00 ; Offset address of buffer
+    
+    int 0x13 ; Call BIOS interrupt
+    jc .error ; If carry flag is set, then there was an error
+    jmp .success ; Else, continue
+
+    .error:
+        push ax ; Save error code in AH
+        mov si, error_msg ; Set SI to point to error_msg
+        call PrintString ; Print error_msg
+
+        ; Print error code
+        pop ax ; Get error code
+        mov al, ah
+        call Print2Hex
+
+        jmp .halt ; Halt the system
+
+    .success:
+        mov si, success_msg ; Set SI to point to success_msg
+        call PrintString ; Print success_msg
+
+        call PrintNewLine
+
+        ; Print the second sector
+        mov si, 0x7e00 ; Set SI to point to buffer
+        call PrintString ; Print buffer
+
+    .halt:
+        ; End
+        cli                                 ;Clear all interrupts, so we don't need to handle them in halt state
+        hlt                                 ;Halt the system - wait for next interrupt - but we disabled so its very efficient and not using much CPU%
+...
+BOOT_DRIVE db 0
+error_msg db 'Error reading from disk, error code: ', 0
+success_msg db 'Successfully read from disk', 0
+
+times 510 - ($ - $$) db 0               ;Fill the rest of sector with 0
+dw 0xAA55                               ;Add boot signature at the end of bootloader
+
+times 512 db 'A'
+{% endhighlight %}
+
+Note: the BIOS stops reading when it reaches `0x00` (zero terminated string).
+
+So it was luck that after the second sector, the next bytes are zero. We should never do that again, since its not safe.
+
 ## Understand the stack: SP, BP, SS
 
 The stack is used for when we push or pop values. It grows from high address to low address. It grows downwards.
@@ -198,4 +277,152 @@ We need to initialize the stack, so when we use it, it wont override other memor
 
 Since our code starts at `0x7C00`, then if we initialize the stack pointer to `0x7C01`, after one byte push the stack pointer will override `0x7C01`, which is our code. We don't want that.
 
-So we need to initialize the stack pointer to a higher address, or lower address. If we do it higher than `0x7C00` we still have to worry about the stack growing downwards. But if we initialize it to a lower address (lower than `0x7C00`), then it can't override our code. We 
+So we need to initialize the stack pointer to a higher address, or lower address. If we do it higher than `0x7C00` we still have to worry about the stack growing downwards. But if we initialize it to a lower address (lower than `0x7C00`), then it can't override our code.
+
+To summorize, we will initialize the stack pointer going downwards, so it won't override our code:
+
+{% highlight nasm %}
+
+mov bp, 0x7C00
+mov sp, bp
+
+{% endhighlight %}
+
+## Entering 32-bit protected mode
+
+We want to switch 16-bit real-mode to 32-bit protected mode. To make it short, the reason is that it gives us more features, and we can use more memory. As the name suggests - it protects the memory from being accessed by different segments.
+
+We need to understand `GDT (Global Descriptor Table)` and `IDT (Interrupt Descriptor Table)` to understand protected mode.
+
+In 32-bit protected mode we can't call BIOS interrupts anymore. So how do we display something on the screen? In VGA mode we simply need to write to the memory location `0xB8000` and it will display on the screen. But in protected mode we can't do that, because we can't access memory directly. We need to use the `GDT` to access memory.
+
+To enter protected mode:
+
+1. Disable interrupts (`cli`)
+2. Load the GDT (`lgdt [GDT_Descriptor]` - `lgdt` is a new instruction we never seen before)
+3. Enable A20 line (set last bit of  `cr0` register to 1, this is a new register we never seen before)
+
+Step 1 and 3 is easy. I'll talk about step 2 in the next section.
+
+## Understand GDT (Global Descriptor Table)
+
+We need to define the GDT in order to enter protected mode. The GDT will sit inside the bootsector code.
+
+Here are some of the resources I learned from:
+
+- [YouTube video]([here](https://www.youtube.com/watch?v=Wh5nPn2U_1w&t=326s))
+- [OSDev wiki](https://wiki.osdev.org/Global_Descriptor_Table)
+
+The Global Descriptor Table (GDT) is a system-wide data structure used in x86 protected mode to define and manage memory segments. It is a table of segment descriptors that describe the attributes and properties of various memory segments used by the processor.
+
+The GDT holds multiple segments entries. GDT is a descriptor (list of properties) which describe the segments.
+
+GDT must contain:
+
+- Code Segment Descriptor
+- Data Segment Descriptor
+
+### Code Segment Descriptor
+
+It describes the code segment.
+
+Attributes / Properties:
+
+- Size (of the segment). It consists of:
+  - Base [32 bits] (the start location of the segment)
+  - Limit [20 bits] (describes the size of the segment)
+- Present [1 bit] (1 - if the segment is used, 0 - if the segment is not used)
+- Privilege [2 bits] (Describes segment privilege level, implements memory protection / access permissions. 0 - highest privilege, 11 - lowest privilege)
+- Type [1 bit] (1 - if code OR data segment)
+- Type flags [4 bits]
+  - Bit 3: Executable? (1 - if executable, 0 - if not executable)
+  - Bit 2: Conforming (can this be executed by lower privilege level?) (1 - this segment can be accessed by lower privilege level, 0 - this segment can't be accessed by lower privilege level)
+  - Bit 1: Readable? (1 - if readable, 0 - if not readable)
+  - Bit 0: Accessed? (managed by the CPU, don't touch. 1 - if accessed, 0 - if not accessed)
+- Other flags [4 bits]
+  - Bit 3: Granularity? (If set, limit is multiplied by 4KB (0x1000), else limit is in bytes)
+  - Bit 2: Size (If set, 32-bit protected mode, else 16-bit protected mode)
+  - Bit 1: Reserved (0)
+  - Bit 0: Reserved (0)
+
+Now we decide how to build our OS.
+
+In short, I will go with flat-memory model (not segmentation and not paging).
+
+I will also run in ring-0 (highest privilege level). All programs can access all memory. Which is the easiest to implement.
+
+So in my case I will set the code segment descriptor to:
+
+- Base: 0x0 (code starts at 0x0)
+- Limit: 0xFFFFF (maximum of 20 bits)
+- Present: 1 (this segment will be used)
+- Privilege: 00 (ring-0)
+- Type: 1 (code segment)
+- Type flags: 1010 (executable, not conforming, readable, not accessed)
+- Other flags: 1100 (granularity, 32-bit protected mode, reserved, reserved)
+
+
+In conclusion the code segment descriptor will be:
+
+- pres, priv, type = 1001
+- type flags = 1010
+- other flags = 1100
+
+### Data Segment Descriptor
+
+The data segment descriptor is similar to the code segment descriptor, but it describes the data segment.
+
+I will use the same values from the code segment descriptor, except:
+
+- The first bit of the type flags will be set to 0 (data segment) and not 1 (code segment)
+- The second bit of the type flags will be set to 0 (the flag is not conforming anymore but the direction flag of the data segment which if set, the segment expands downward direction). We don't want that so we set that to 0.
+-  The third bit of the type flags is now 'writeable?' flag and not 'readable?' flag. We want to write to data segment so we will set that to 1.
+
+In conclusion the data segment descriptor will be:
+
+- pres, priv, type = 1001
+- type flags = 0010
+- other flags = 1100
+
+## Defining the GDT in assembly
+
+{% highlight nasm %}
+
+GDT_Start:          ; Create a global descriptor table
+    null_descriptor:
+        dd 0x0 ; 8 bits of zeros
+        dd 0x0
+    code_descriptor:
+        dw 0xFFFF ; Limit (16 bits)
+        dw 0x0 ; Base (24 bits in total) (16 bits)
+        db 0x0 ; Base (8 bits)
+        db 10011010b ; First 4 bits: present, priviledge, type. Last 4 bits: Type flags
+        db 11001111b ; Other flags (4 bits) + Limit (4 bits)
+        db 0x0 ; Base (8 bits)
+    data_descriptor:
+        dw 0xFFFF ; Limit (16 bits)
+        dw 0x0 ; Base (24 bits in total) (16 bits)
+        db 0x0 ; Base (8 bits)
+        db 10010010b ; First 4 bits: present, priviledge, type. Last 4 bits: Type flags
+        db 11001111b ; Other flags (4 bits) + Limit (4 bits)
+        db 0x0 ; Base (8 bits)
+GDT_End:
+GDT_Descriptor:
+    dw GDT_End - GDT_Start - 1 ; Size of GDT
+    dd GDT_Start ; Start address of GDT
+
+{% endhighlight %}
+
+## Enter protected mode in assembly
+
+{% highlight nasm %}
+
+EnterProtectedMode:       ; Enter protected mode
+    cli
+    lgdt [GDT_Descriptor] ; Load GDT
+    mov eax, cr0
+    or eax, 0x1 ; Set protected mode bit
+    mov cr0, eax
+    jmp CODE_SEG:init_pm ; Jump to code segment in protected mode
+
+{% endhighlight %}
