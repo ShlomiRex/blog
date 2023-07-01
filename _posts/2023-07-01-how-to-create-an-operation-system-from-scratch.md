@@ -485,6 +485,16 @@ GDT must contain:
 - Code Segment Descriptor
 - Data Segment Descriptor
 
+### Segment Descriptor Structure
+
+![](/assets/2023-7/Screenshot%202023-07-01%20at%2019.39.49.png)
+
+![](/assets/2023-7/Screenshot%202023-07-01%20at%2019.41.48.png)
+
+Both the code segment and data segment have almost the same structure as in the above image.
+
+In the next section it will be made more clearer.
+
 ### Code Segment Descriptor
 
 It describes the code segment.
@@ -641,4 +651,45 @@ The code is located at: [github](https://github.com/ShlomiRex/os_from_scratch/bl
 Or here: [pastebin](https://pastebin.com/tw3MPkD5)
 
 (maybe in the future I'll change the github repo name)
+
+Note: we must do far-jump, in this code:
+
+`jmp CODE_SEG:StartProtectedMode`
+
+There is something called `CPU pipelining` that runs instructions in parallel. Long story short, to force the CPU into the protected mode state we do a far jump. A far jump is a jump that changes the code segment and the instruction pointer. The CPU will not run the next instruction until the far jump is completed (if we don't do this then the next instruction might be executed in 16-bit mode and not in 32-bit mode).
+
+## Orginize code into multiple ASM files
+
+The code becomes messy. If its not clear yet, the best way to code is to split the code into multiple files. We will split the code into:
+
+`bootsector.asm` - the first sector that will be loaded by the BIOS
+`gdt.asm` - the code that will define the GDT
+`bios.asm` - helper functions such as print string, print hex, and more
+`pm.asm` - everything to do with entering protected mode
+
+Then we use it in `bootsector.asm`:
+
+{% highlight nasm %}
+
+Start:
+    ...
+    jmp EnterProtectedMode
+...
+%include "pm.asm"
+%include "gdt.asm"
+%include "bios.asm"
+...
+times 510 - ($ - $$) db 0
+dw 0xAA55
+
+{% endhighlight %}
+
+## Cross-Compiler
+
+We will compile a cross-compiler for our OS. A cross-compiler is a compiler that runs on one platform/architecture but generates code for another platform/architecture. For example, I am running MacBook Pro M1 which isn't running x86_64 but will output x86_64 code.
+
+But even if you are running an x86_64 machine, it is still recommended to use a cross-compiler because it will be easier to compile the code for the OS. We will also force it to be specifically for our OS.
+
+The best resource on how to create a cross-compiler is from: [osdev.org](https://wiki.osdev.org/GCC_Cross-Compiler)
+
 
