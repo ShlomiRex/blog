@@ -9,3 +9,6 @@ Install gems:
 
 Then serve the website with `_drafts` posts:
 `bundle exec jekyll serve --drafts`
+
+To server onto LAN network:
+`bundle exec jekyll server --host=0.0.0.0`

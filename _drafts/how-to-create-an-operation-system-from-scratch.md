@@ -152,6 +152,24 @@ This is where the CHS comes from. It specifies the cylinder, head and sector of 
 
 In a nutshell, cylinder is what physical platter we read from (in blue), head (or track) is the radius of the platter (in yellow), and sector is the angle of the platter (in red).
 
+## Initializing the stack
+
+We need to initialize the stack, so when we use it, it wont override other memory. Remember: the stack grows downwards.
+
+Since our code starts at `0x7C00`, then if we initialize the stack pointer to `0x7C01`, after one byte push the stack pointer will override `0x7C01`, which is our code. We don't want that.
+
+So we need to initialize the stack pointer to a higher address, or lower address. If we do it higher than `0x7C00` we still have to worry about the stack growing downwards. But if we initialize it to a lower address (lower than `0x7C00`), then it can't override our code.
+
+To summorize, we will initialize the stack pointer going downwards, so it won't override our code:
+
+{% highlight nasm %}
+
+mov bp, 0x7C00
+mov sp, bp
+
+{% endhighlight %}
+
+
 ## Read from disk
 
 Now we want to read different sectors of our code. Since 512 bytes isn't enough, we will make a bootable image of 2 sectors (1024 bytes).
@@ -171,9 +189,19 @@ The BIOS reads the sector into memory at location `ES:BX` (remember CPU addressi
 The code:
 
 {% highlight nasm %}
+[global Start]
+[BITS 16]
+[ORG 0x7C00]
 
-; DL stores the current drive number, save in variable
+
+section .text
+Start:
+    ; DL stores the current drive number, save in variable
     mov [BOOT_DRIVE], dl
+
+    ; Initialize the stack
+    mov bp, 0x7C00
+    mov sp, bp
 
     ; Read second sector (512 bytes)
     xor ax, ax ; Indirectly set ES to 0
@@ -218,9 +246,114 @@ The code:
 
     .halt:
         ; End
+        ;jmp EnterProtectedMode
         cli                                 ;Clear all interrupts, so we don't need to handle them in halt state
         hlt                                 ;Halt the system - wait for next interrupt - but we disabled so its very efficient and not using much CPU%
-...
+
+Print4Hex:
+    ; Input AX register, BL register (optional)
+    ; Output: None
+    ; Prints the hex value of AX register (4 nibbles). Example: AX=0x1234 will print: 0x1234
+    ; If you want to print prefix '0x' then set BL=0, else set BL=1. Example: AX=0x1234, BL=1 will print: 1234
+    push ax
+
+    shr ax, 8
+    mov ah, bl ; Print prefix according to BL input for first byte
+    call Print2Hex
+
+    ; Print low byte
+    pop ax
+    mov ah, 1 ; Here we don't need to print prefix
+    call Print2Hex
+
+    ret
+
+Print2Hex:
+    ; Input: AL register, AH register (optional)
+    ; Output: None
+    ; Print the hex value of AL register (2 nibbles). Example: AL=0x12 will print: 0x12
+    ; If you want to print prefix '0x' then set AH=0, else set AH=1. Example: AL=0x12, AH=1 will print: 12
+    cmp ah, 1
+    je .no_prefix
+    ; Print hex prefix
+    push ax
+    mov al, '0'
+    call PrintCharacter
+    mov al, 'x'
+    call PrintCharacter
+    pop ax ; Get the argument
+    .no_prefix:
+
+    ; Print high nibble
+    call ALToHex
+    push ax ; Store for low nibble printing later on
+    mov al, ah ; Move high nibble to AL, since the PrintCharacter procedure expects the character in AL
+    ; Check if nibble is greater than 0x9. If it does, then we need offset of 0x41 to get 'A' in ASCII. Else, we need offset of 0x30 to get '0' in ASCII.
+    cmp al, 0xA
+    jl .finish
+    add al, 0x7
+    .finish:
+    add al, 0x30
+    call PrintCharacter
+
+    ; Print low nibble
+    pop ax
+    cmp al, 0xA
+    jl .finish2
+    add al, 0x7
+    .finish2:
+    add al, 0x30
+    call PrintCharacter
+
+    ret
+
+ALToHex:
+    ; Input: AL register
+    ; Output: AX register
+    ; Convert a number in AL to hex nibbles. Example: 256 -> 0xAB. The high nibble (0xA) is stored in AH and the low nibble (0xB) in AL
+    push ax ; Save AL
+    ; Get high nibble of AL, store in DH for later retrieval
+    and al, 0xF0
+    shr al, 4
+    mov dh, al
+    
+    pop ax
+    ; Get low nibble of AL, store in AL
+    and al, 0x0F
+    
+    mov ah, dh ; Retrieve high nibble from DH to AH
+    ret
+
+
+
+PrintCharacter:                         ;Procedure to print character on screen
+                                        ;Assume that ASCII value is in register AL
+    mov ah, 0x0E                        ;Tell BIOS that we need to print one charater on screen.
+    mov bh, 0x00                        ;Page no.
+    mov bl, 0x07                        ;Text attribute 0x07 is lightgrey font on black background
+    int 0x10                            ;Call video interrupt
+    ret                                 ;Return to calling procedure
+PrintString:                            ;Procedure to print string on screen
+                                        ;Assume that string starting pointer is in register SI
+    .next_character:                     ;Lable to fetch next character from string
+        mov al, [SI]                    ;Get a byte from string and store in AL register
+        inc SI                          ;Increment SI pointer
+        or AL, AL                       ;Check if value in AL is zero (end of string)
+        jz .exit_function                ;If end then return
+        call PrintCharacter             ;Else print the character which is in AL register
+        jmp .next_character              ;Fetch next character from string
+        .exit_function:                  ;End label
+        ret                             ;Return from procedure
+PrintNewLine:
+    ; Print new line
+    mov al, 0x0D
+    call PrintCharacter
+    mov al, 0x0A
+    call PrintCharacter
+    ret
+
+; CODE_SEG equ code_descriptor - GDT_Start
+; DATA_SEG equ data_descriptor - GDT_Start
 BOOT_DRIVE db 0
 error_msg db 'Error reading from disk, error code: ', 0
 success_msg db 'Successfully read from disk', 0
@@ -228,12 +361,14 @@ success_msg db 'Successfully read from disk', 0
 times 510 - ($ - $$) db 0               ;Fill the rest of sector with 0
 dw 0xAA55                               ;Add boot signature at the end of bootloader
 
+; Second sector is filled with 'A'
 times 512 db 'A'
 {% endhighlight %}
 
 Note: the BIOS stops reading when it reaches `0x00` (zero terminated string).
 
 So it was luck that after the second sector, the next bytes are zero. We should never do that again, since its not safe.
+
 
 ## Understand the stack: SP, BP, SS
 
@@ -270,23 +405,51 @@ Then it pushes `AX` onto stack, which should decrement `SP` by 2, and we get `0x
 
 Then it pops back `AX` from the stack, which should increment `SP` by 2, and we get `0x6F00` again.
 
+## Write assembly in 2 files instead of 1
 
-## Initializing the stack
+So far we written the assembly code in 1 file. We need to understand how to write code in 2 files so its easier to debug and write code.
 
-We need to initialize the stack, so when we use it, it wont override other memory. Remember: the stack grows downwards.
+The bootsector should not change. The size of the bootsector is still 512 bytes.
 
-Since our code starts at `0x7C00`, then if we initialize the stack pointer to `0x7C01`, after one byte push the stack pointer will override `0x7C01`, which is our code. We don't want that.
+However now we want to add a second sector filled with 'A' characters. The bootsector will read the second sector and print it.
 
-So we need to initialize the stack pointer to a higher address, or lower address. If we do it higher than `0x7C00` we still have to worry about the stack growing downwards. But if we initialize it to a lower address (lower than `0x7C00`), then it can't override our code.
+`second_sector.asm`:
 
-To summorize, we will initialize the stack pointer going downwards, so it won't override our code:
 
 {% highlight nasm %}
 
-mov bp, 0x7C00
-mov sp, bp
+times 512 db 'A'
 
 {% endhighlight %}
+
+Now we combine seperatly the bootsector and the second sector:
+
+```
+nasm bootsector.asm -o bootsector.bin
+nasm second_sector.asm -o second_sector.bin
+cat bootsector.bin second_sector.bin > boot.img
+qemu-system-x86_64 boot.img
+```
+
+## Include files in assembly
+
+Instead of combining two assembly files like I did above with calling the compiler twice we can use the compiler once.
+
+`bootsector.asm`:
+{% highlight nasm %}
+
+...
+
+%include "second_sector.asm"
+
+{% endhighlight %}
+
+Now we can just compile:
+
+```
+nasm -f bin bootsector.asm -o boot.img
+qemu-system-x86_64 boot.img
+```
 
 ## Entering 32-bit protected mode
 
