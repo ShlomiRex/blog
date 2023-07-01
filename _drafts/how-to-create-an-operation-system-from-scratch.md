@@ -578,7 +578,24 @@ GDT_Descriptor:
 
 ## Enter protected mode in assembly
 
+`bootloader.asm`:
+
 {% highlight nasm %}
+
+[global Start]
+[BITS 16]
+[ORG 0x7C00]
+
+section .text
+Start:
+    ; DL stores the current drive number, save in variable
+    mov [BOOT_DRIVE], dl
+
+    ; Initialize the stack
+    mov bp, 0x7C00
+    mov sp, bp
+
+    jmp EnterProtectedMode
 
 EnterProtectedMode:       ; Enter protected mode
     cli
@@ -586,9 +603,42 @@ EnterProtectedMode:       ; Enter protected mode
     mov eax, cr0
     or eax, 0x1 ; Set protected mode bit
     mov cr0, eax
-    jmp CODE_SEG:start_protected_mode ; Jump to code segment in protected mode
+    jmp CODE_SEG:StartProtectedMode ; Jump to code segment in protected mode
+GDT_Start:
+    ... ; What I wrote in the previous section
+GDT_End:
+GDT_Descriptor:
+    dw GDT_End - GDT_Start - 1 ; Size of GDT
+    dd GDT_Start ; Start address of GDT
+... ; Functions used in 16-bit real mode
+CODE_SEG equ code_descriptor - GDT_Start
+DATA_SEG equ data_descriptor - GDT_Start
+BOOT_DRIVE db 0
+error_msg db 'Error reading from disk, error code: ', 0
+success_msg db 'Successfully read from disk', 0
+
+; Here the compiler knows from this point this is 32-bit protected mode
 [BITS 32]
-start_protected_mode:
-    ... ; Code in protected mode
+StartProtectedMode:
+    mov al, 'A'
+    mov ah, 0x0f
+    mov [0xb8000], ax
+    jmp $
+
+times 510 - ($ - $$) db 0
+dw 0xAA55
 
 {% endhighlight %}
+
+When we run we see that the letter 'A' is printed on the screen (left-top corner):
+
+![](/assets/2023-7/Screenshot%202023-07-01%20185917.png)
+
+Because we entered protected mode, we can't use the BIOS interrupts anymore. What I have done in the code is modify the VGA memory directly to print the letter 'A' on the screen. The VGA memory is located at `0xB8000`.
+
+The code is located at: [github](https://github.com/ShlomiRex/os_from_scratch/blob/8dd0efb5eb32796a2d67f7ab756258c80e03ca74/bootsector.asm)
+
+Or here: [pastebin](https://pastebin.com/tw3MPkD5)
+
+(maybe in the future I'll change the github repo name)
+
