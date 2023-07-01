@@ -83,7 +83,7 @@ qemu-system-x86_64 boot.img
 
 Code:
 
-{% highlight nasm %}
+```nasm
 [global Start]
 [BITS 16]
 [ORG 0x7C00]
@@ -116,7 +116,7 @@ String db 'Hello World', 0              ;HelloWorld string ending with 0
 
 times 510 - ($ - $$) db 0               ;Fill the rest of sector with 0
 dw 0xAA55                               ;Add boot signature at the end of bootloader
-{% endhighlight %}
+```
 
 Here is the hexdump of the program:
 
