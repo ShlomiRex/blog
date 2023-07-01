@@ -423,6 +423,9 @@ EnterProtectedMode:       ; Enter protected mode
     mov eax, cr0
     or eax, 0x1 ; Set protected mode bit
     mov cr0, eax
-    jmp CODE_SEG:init_pm ; Jump to code segment in protected mode
+    jmp CODE_SEG:start_protected_mode ; Jump to code segment in protected mode
+[BITS 32]
+start_protected_mode:
+    ... ; Code in protected mode
 
 {% endhighlight %}
