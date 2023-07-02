@@ -692,4 +692,83 @@ But even if you are running an x86_64 machine, it is still recommended to use a 
 
 The best resource on how to create a cross-compiler is from: [osdev.org](https://wiki.osdev.org/GCC_Cross-Compiler)
 
+### On macOS M1 chip
 
+We can't use the `gcc` and `ld` of the system because they are not GNU, which have specific features that we need (they are darwin - apple created them).
+
+There is no way to avoid this but we must compile from source code to create our own compiler. First we install build dependencies:
+
+`brew install wget bison flex gmp libmpc mpfr texinfo mtools qemu nasm`
+
+Then we get `binutils` source from [here](https://ftp.gnu.org/gnu/binutils/). I chose `binutils 2.40`.
+
+And we get `gcc` source from [here](https://ftp.gnu.org/gnu/gcc/). I chose `gcc 12.2.0`.
+
+Put both the binutils and gcc into a folder in Desktop for example and extract:
+
+![](/assets/2023-7/Screenshot%202023-07-02%20at%2016.16.14.png)
+
+Now create build folder for gcc and build folder to binutils, call them `build-gcc` and `build-binutils`.
+
+Before continuing, please read on [osdev.org](https://wiki.osdev.org/GCC_Cross-Compiler#Preparation) on how to build the cross-compiler.
+
+
+Now lets `cd` into the directory where we extracted binutils and gcc. Lets set the environment variables:
+
+{% highlight bash %}
+
+export PREFIX="$HOME/Desktop/my_tools"
+export TARGET=i686-elf
+export PATH="$PREFIX/bin:$PATH"
+
+{% endhighlight %}
+
+Where `prefix` is the folder where we want to install the cross-compiler (the binaries). I don't want to mess with my system utils so I created dedicated directory for binutils. `target` is the target architecture. We will compile for x64 and not x86 since we can compile 32bit on 64bit compiler anyways. And  `path` is the path to the cross-compiler.
+
+Now I cd into `build-binutils` and run: `../binutils-2.40/configure --target=$TARGET --prefix="$PREFIX" --with-sysroot --disable-nls --disable-werror`
+
+Now I run: `make` and after it finishes: `make install`:
+
+![](/assets/2023-7/Screenshot%202023-07-02%20at%2016.52.55.png)
+
+As we can see we compiled the binutils, which includes the linker `i686-elf-ld`.
+
+Now to compile gcc:
+
+```bash
+cd binutils_and_gcc
+cd build-gcc
+../gcc-12.2.0/configure --target=$TARGET --prefix="$PREFIX" --disable-nls --enable-languages=c,c++ --without-headers
+make all-gcc
+make all-target-libgcc
+make install-gcc
+make install-target-libgcc
+```
+
+After I ran `../gcc-12.2.0 ......` it told me I'm missing packages:
+
+```
+configure: error: Building GCC requires GMP 4.2+, MPFR 3.1.0+ and MPC 0.8.0+.
+Try the --with-gmp, --with-mpfr and/or --with-mpc options to specify
+their locations.  Source code for these libraries can be found at
+their respective hosting sites as well as at
+https://gcc.gnu.org/pub/gcc/infrastructure/.  See also
+http://gcc.gnu.org/install/prerequisites.html for additional info.  If
+you obtained GMP, MPFR and/or MPC from a vendor distribution package,
+make sure that you have installed both the libraries and the header
+files.  They may be located in separate packages.
+```
+
+So I ran: `brew install gmp mpfr mpc`
+
+But it didn't fix that. After googling I ran the following command inside gcc directory: `./contrib/download_prerequisites` and it fixed my problems, I ran `../gcc-12.2.0/configure --target=$TARGET --prefix="$PREFIX" --disable-nls --enable-languages=c,c++ --without-headers` again.
+
+Now I ran `make all-gcc` and it worked. I continue to run the commands above.
+
+Now `gcc` is installed aswell:
+
+![](/assets/2023-7/Screenshot%202023-07-02%20at%2017.30.07.png)
+
+### On Windows
+
+On Windows we can download the source: [here](https://ftp.gnu.org/gnu/binutils/): **binutils-2.40.tar.gz**
