@@ -808,3 +808,354 @@ make install-target-libgcc
 Final result:
 
 ![](/assets/2023-7/Screenshot 2023-07-02 183645.png)
+
+## Writing our kernel
+
+Now we write our kernel in C:
+
+`kernel.cpp`:
+```c
+extern "C" void main() {
+	// Print OK on the next line
+	*(char*)0xb8140 = 'O';
+	*(char*)0xb8142 = 'K';
+}
+```
+
+The reason we need to define "extern C" is because C++ mangles the function names (scrambles) and this prevents the compiler from mangling the function name (read about mangling on the internet its interesting).
+
+We also need to call that function `main` from assembly:
+
+`kernel_entry.asm`:
+{% highlight nasm %}
+[BITS 32]
+[extern main]
+
+call main
+cli
+hlt
+{% endhighlight %}
+
+## Compiling bootloader + kernel
+
+Now we compile our kernel. We will use `Makefile` to orginize commands:
+
+`Makefile`:
+```bash
+gnu_gcc := "/Users/user/Desktop/my_tools/bin/i686-elf-gcc"
+gnu_ld := "/Users/user/Desktop/my_tools/bin/i686-elf-ld"
+
+all:
+# kernel.o
+	$(gnu_gcc) -ffreestanding -m32 -g -c "kernel.cpp" -o "kernel.o"
+# kernel_entry.o
+	nasm "kernel_entry.asm" -f elf -o "kernel_entry.o"
+# kernel.bin - link kernel_entry.o and kernel.o
+	$(gnu_ld) -o "full_kernel.bin" -Ttext 0x1000 "kernel_entry.o" "kernel.o" --oformat binary
+# boot.bin - bootloader
+	nasm "bootsector.asm" -f bin -o "boot.bin"
+# everything.bin - bootloader + kernel
+	cat "boot.bin" "full_kernel.bin" > "everything.bin"
+# zeroes.bin - zeroes
+	nasm "zeroes.asm" -f bin -o "zeroes.bin"
+# os.bin - everything + zeroes
+	cat "everything.bin" "zeroes.bin" > "os.bin"
+# run
+	qemu-system-x86_64 -drive format=raw,file="os.bin",index=0,if=floppy,  -m 128M
+
+```
+
+The basic takeaway is this:
+
+- First command: compile `kernel.cpp` to `kernel.o`
+- Second command: compile `kernel_entry.asm` to `elf` file and not bin, since we need to use linker and link the `extern main` to resolve the symbol.
+- Third command: link `kernel_entry.o` and `kernel.o` to `full_kernel.bin` - this is symbol resolving
+- Fourth command: compile `bootsector.asm` to binary
+  - The `nasm` compiler also compiles included assembly files, such as `bios.asm` and `gdt.asm`
+- Fifth command: the `cat` command concatinates `boot.bin` and `full_kernel.bin` to `everything.bin`. Basically we add the kernel sector next to the boot sector.
+- Sixth command: compile the `zeroes.asm` file to binary. We will use this to fill the rest of the floppy disk with zeroes.
+  - Reason: we don't know the size of the kernel. For now, we are reading 20 sectors of kernel in the bootloader. This is to allow the kernel binary to expand, untill it reaches 20*512=10MB in size. This is a plaster solution, but it works for now. We want something working first.
+- Seventh command: concatinates `everything.bin` and `zeroes.bin` to `os.bin`. This is our final binary. Basically the boot loader won't fail when reading 20 kernel sectors.
+- Eighth command: run `os.bin` in qemu.
+
+## My working code
+
+`kernel.cpp`:
+```c
+extern "C" void main() {
+	// Print OK on the next line
+	*(char*)0xb8140 = 'O';
+	*(char*)0xb8142 = 'K';
+}
+```
+
+`kernel_entry.asm`:
+{% highlight nasm %}
+[BITS 32]
+[extern main]
+
+call main
+cli
+hlt
+{% endhighlight %}
+
+`bootsector.asm`:
+{% highlight nasm %}
+[global Start]
+[BITS 16]
+[ORG 0x7C00]
+
+section .text
+
+Start:
+    ; DL stores the current drive number, save in variable
+    mov [BOOT_DRIVE], dl
+
+    ; Initialize the stack
+    mov bp, 0x7C00
+    mov sp, bp
+
+    call ClearScreen
+
+    mov SI, hello_msg
+    call PrintString
+    call PrintNewLine
+    
+    ; Read kernel
+    xor ax, ax
+    mov es, ax
+    mov ds, ax
+    
+    mov bx, KERNEL_ADDRESS
+    mov dh, 20
+    mov ah, 2
+    mov al, dh
+    mov ch, 0
+    mov dh, 0
+    mov cl, 2
+    mov dl, [BOOT_DRIVE]
+    int 0x13
+    jc DiskError
+    jmp NoDiskError
+
+    DiskError:
+        mov SI, disk_error_msg
+        call PrintString
+
+        ; Error code
+        mov al, ah
+        mov ah, 0
+        call Print2Hex
+
+        cli
+        hlt
+    NoDiskError:
+        jmp EnterProtectedMode
+
+%include "pm.asm"
+%include "gdt.asm"
+%include "bios.asm"
+
+
+BOOT_DRIVE db 0
+KERNEL_ADDRESS equ 0x1000 ; Don't start at 0 to avoid overwriting interrupt vector table of the BIOS
+hello_msg db "Running in 16-bit real mode...", 0
+disk_error_msg db "Error reading disk, error code: ", 0
+
+times 510 - ($ - $$) db 0
+dw 0xAA55
+{% endhighlight %}
+
+`pm.asm`:
+{% highlight nasm %}
+EnterProtectedMode:
+    mov si, enter_pm_msg
+    call PrintString
+    call PrintNewLine
+
+    ; Enter protected mode
+    cli
+    lgdt [GDT_Descriptor] ; Load GDT
+    mov eax, cr0
+    or eax, 0x1 ; Set protected mode bit
+    mov cr0, eax
+    jmp CODE_SEG:StartProtectedMode ; Far jump to code segment in protected mode, force CPU to flush pipeline
+[BITS 32]
+StartProtectedMode:
+    ; Initialize segment registers immediately after entering protected mode
+    mov ax, DATA_SEG
+    mov ds, ax
+    mov ss, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    ; Initialize the stack
+    mov ebp, 0x90000
+    mov esp, ebp
+
+    ; TODO: Remove this 'OK' we do this in kernel in C++ instead
+    ; Print 'OK' on second line (VGA memory starts at 0xB8000)
+    ; mov al, 'O'
+    ; mov ah, 0x0f
+    ; mov [0xb80A0], ax
+    ; mov al, 'K'
+    ; mov [0xb80A2], ax
+
+    ; cli
+    ; hlt
+    jmp KERNEL_ADDRESS
+
+enter_pm_msg db "Entering protected mode...", 0
+{% endhighlight %}
+
+`gdt.asm`:
+{% highlight nasm %}
+
+GDT_Start:          ; Create a global descriptor table
+    null_descriptor:
+        dd 0x0 ; 8 bits of zeros
+        dd 0x0
+    code_descriptor:
+        dw 0xFFFF ; Limit (16 bits)
+        dw 0x0 ; Base (24 bits in total) (16 bits)
+        db 0x0 ; Base (8 bits)
+        db 10011010b ; First 4 bits: present, priviledge, type. Last 4 bits: Type flags
+        db 11001111b ; Other flags (4 bits) + Limit (4 bits)
+        db 0x0 ; Base (8 bits)
+    data_descriptor:
+        dw 0xFFFF ; Limit (16 bits)
+        dw 0x0 ; Base (24 bits in total) (16 bits)
+        db 0x0 ; Base (8 bits)
+        db 10010010b ; First 4 bits: present, priviledge, type. Last 4 bits: Type flags
+        db 11001111b ; Other flags (4 bits) + Limit (4 bits)
+        db 0x0 ; Base (8 bits)
+GDT_End:
+GDT_Descriptor:
+    dw GDT_End - GDT_Start - 1 ; Size of GDT
+    dd GDT_Start ; Start address of GDT
+CODE_SEG equ code_descriptor - GDT_Start
+DATA_SEG equ data_descriptor - GDT_Start
+{% endhighlight %}
+
+`bios.asm`:
+{% highlight nasm %}
+[BITS 16]
+
+Print4Hex:
+    ; Input AX register, BL register (optional)
+    ; Output: None
+    ; Prints the hex value of AX register (4 nibbles). Example: AX=0x1234 will print: 0x1234
+    ; If you want to print prefix '0x' then set BL=0, else set BL=1. Example: AX=0x1234, BL=1 will print: 1234
+    push ax
+
+    shr ax, 8
+    mov ah, bl ; Print prefix according to BL input for first byte
+    call Print2Hex
+
+    ; Print low byte
+    pop ax
+    mov ah, 1 ; Here we don't need to print prefix
+    call Print2Hex
+
+    ret
+
+Print2Hex:
+    ; Input: AL register, AH register (optional)
+    ; Output: None
+    ; Print the hex value of AL register (2 nibbles). Example: AL=0x12 will print: 0x12
+    ; If you want to print prefix '0x' then set AH=0, else set AH=1. Example: AL=0x12, AH=1 will print: 12
+    cmp ah, 1
+    je .no_prefix
+    ; Print hex prefix
+    push ax
+    mov al, '0'
+    call PrintCharacter
+    mov al, 'x'
+    call PrintCharacter
+    pop ax ; Get the argument
+    .no_prefix:
+
+    ; Print high nibble
+    call ALToHex
+    push ax ; Store for low nibble printing later on
+    mov al, ah ; Move high nibble to AL, since the PrintCharacter procedure expects the character in AL
+    ; Check if nibble is greater than 0x9. If it does, then we need offset of 0x41 to get 'A' in ASCII. Else, we need offset of 0x30 to get '0' in ASCII.
+    cmp al, 0xA
+    jl .finish
+    add al, 0x7
+    .finish:
+    add al, 0x30
+    call PrintCharacter
+
+    ; Print low nibble
+    pop ax
+    cmp al, 0xA
+    jl .finish2
+    add al, 0x7
+    .finish2:
+    add al, 0x30
+    call PrintCharacter
+
+    ret
+
+ALToHex:
+    ; Input: AL register
+    ; Output: AX register
+    ; Convert a number in AL to hex nibbles. Example: 256 -> 0xAB. The high nibble (0xA) is stored in AH and the low nibble (0xB) in AL
+    push ax ; Save AL
+    ; Get high nibble of AL, store in DH for later retrieval
+    and al, 0xF0
+    shr al, 4
+    mov dh, al
+    
+    pop ax
+    ; Get low nibble of AL, store in AL
+    and al, 0x0F
+    
+    mov ah, dh ; Retrieve high nibble from DH to AH
+    ret
+PrintCharacter:                         ;Procedure to print character on screen
+                                        ;Assume that ASCII value is in register AL
+    mov ah, 0x0E                        ;Tell BIOS that we need to print one charater on screen.
+    mov bh, 0x00                        ;Page no.
+    mov bl, 0x07                        ;Text attribute 0x07 is lightgrey font on black background
+    int 0x10                            ;Call video interrupt
+    ret                                 ;Return to calling procedure
+PrintString:                            ;Procedure to print string on screen
+                                        ;Assume that string starting pointer is in register SI
+    .next_character:                     ;Lable to fetch next character from string
+        mov al, [SI]                    ;Get a byte from string and store in AL register
+        inc SI                          ;Increment SI pointer
+        or AL, AL                       ;Check if value in AL is zero (end of string)
+        jz .exit_function                ;If end then return
+        call PrintCharacter             ;Else print the character which is in AL register
+        jmp .next_character              ;Fetch next character from string
+        .exit_function:                  ;End label
+        ret                             ;Return from procedure
+PrintNewLine:
+    ; Print new line
+    mov al, 0x0D
+    call PrintCharacter
+    mov al, 0x0A
+    call PrintCharacter
+    ret
+ClearScreen:
+    mov ah, 0x0
+    mov al, 0x3
+    int 0x10
+    ret
+DiskErrorMessage db "Error reading disk, error code: ", 0
+{% endhighlight %}
+
+`zero.asm`:
+{% highlight nasm %}
+times 10240 db 0
+{% endhighlight %}
+
+And the makefile is mentioned in the section above.
+
+## Final result
+
+![](/assets/2023-7/Screenshot%202023-07-02%20at%2021.09.12.png)
+
