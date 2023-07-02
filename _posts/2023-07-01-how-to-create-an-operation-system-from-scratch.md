@@ -15,6 +15,7 @@ Before we start, let me list the most useful resources for OS development:
 - [OSDev.org wikipedia](https://wiki.osdev.org/Expanded_Main_Page)
 - [Writing a Simple Operating System — from Scratch by Nick Blundell](https://www.cs.bham.ac.uk/~exr/lectures/opsys/10_11/lectures/os-dev.pdf)
 - [BIOS Interrupts and Functions](https://ostad.nit.ac.ir/payaidea/ospic/file1615.pdf)
+- [YouTube video: Protected mode, explains in detail](https://www.youtube.com/watch?v=EBdzWFyKZ0U)
 
 The post is written sequentially, which means it is recommended to read it from top to bottom. The progress is made in the same order as the post, so you can see me actually struggle and get back to previous points.
 
@@ -692,6 +693,8 @@ But even if you are running an x86_64 machine, it is still recommended to use a 
 
 The best resource on how to create a cross-compiler is from: [osdev.org](https://wiki.osdev.org/GCC_Cross-Compiler)
 
+And also here: [YouTube NanoByte](https://www.youtube.com/watch?v=TgIdFVOV_0U)
+
 ### On macOS M1 chip
 
 We can't use the `gcc` and `ld` of the system because they are not GNU, which have specific features that we need (they are darwin - apple created them).
@@ -712,16 +715,15 @@ Now create build folder for gcc and build folder to binutils, call them `build-g
 
 Before continuing, please read on [osdev.org](https://wiki.osdev.org/GCC_Cross-Compiler#Preparation) on how to build the cross-compiler.
 
-
 Now lets `cd` into the directory where we extracted binutils and gcc. Lets set the environment variables:
 
-{% highlight bash %}
+```bash
 
 export PREFIX="$HOME/Desktop/my_tools"
 export TARGET=i686-elf
 export PATH="$PREFIX/bin:$PATH"
 
-{% endhighlight %}
+```
 
 Where `prefix` is the folder where we want to install the cross-compiler (the binaries). I don't want to mess with my system utils so I created dedicated directory for binutils. `target` is the target architecture. We will compile for x64 and not x86 since we can compile 32bit on 64bit compiler anyways. And  `path` is the path to the cross-compiler.
 
@@ -771,4 +773,38 @@ Now `gcc` is installed aswell:
 
 ### On Windows
 
-On Windows we can download the source: [here](https://ftp.gnu.org/gnu/binutils/): **binutils-2.40.tar.gz**
+On Windows we can download the source: [here](https://ftp.gnu.org/gnu/binutils/): **binutils-2.40.tar.gz** and [here](https://ftp.gnu.org/gnu/gcc/?C=M;O=D): **gcc-12.2.0.tar.gz**.
+
+I am using WSL and we do everything simillar to macOS build (except we are using `apt` instead of `brew` to install dependencies):
+
+```bash
+sudo apt update && sudo apt upgrade
+sudo apt install build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo mtools nasm wget
+cd $HOME
+mkdir binutils_and_gcc
+cd binutils_and_gcc
+mkdir build-binutils
+mkdir build-gcc
+wget https://ftp.gnu.org/gnu/binutils/binutils-2.40.tar.xz
+wget https://ftp.gnu.org/gnu/gcc/gcc-12.2.0/gcc-12.2.0.tar.gz
+tar -xf binutils-2.40.tar.xz
+tar -xf gcc-12.2.0.tar.gz
+mkdir $HOME/my_tools
+export PREFIX="$HOME/my_tools"
+export TARGET=i686-elf
+export PATH="$PREFIX/bin:$PATH"
+cd build-binutils/
+../binutils-2.40/configure --target=$TARGET --prefix="$PREFIX" --with-sysroot --disable-nls --disable-werror
+make
+make install
+cd ../build-gcc/
+../gcc-12.2.0/configure --target=$TARGET --prefix="$PREFIX" --disable-nls --enable-languages=c,c++ --without-headers
+make all-gcc
+make all-target-libgcc
+make install-gcc
+make install-target-libgcc
+```
+
+Final result:
+
+![](/assets/2023-7/Screenshot 2023-07-02 183645.png)
