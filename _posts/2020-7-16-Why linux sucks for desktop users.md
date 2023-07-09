@@ -69,7 +69,7 @@ Ubuntu, Debian, Linux Mint, all of the major distributions have GUI. But they la
 
 ## [](#header-2)gnome-nautilus - worst file explorer ever created on this earth
 
-![](/assets/2020-7-16/gnome-3-30-will-bring-a-better-flatpak-experience-to-the-nautilus-file-manager-522142-2.jpg)
+![](assets/2020-7-16/gnome-3-30-will-bring-a-better-flatpak-experience-to-the-nautilus-file-manager-522142-2.jpg)
 *Ubuntu's chosen File Explorer*
 
 Ubuntu's File Explorer (gnome-nautilius) is basic file explorer and it **sucks**.
@@ -79,4 +79,4 @@ Ubuntu's File Explorer (gnome-nautilius) is basic file explorer and it **sucks**
 
 When you click on Windows key it opens the start menu. In many, many linux distros it opens the search menu and completly cover the screen. In Windows, it opens a simple menu, allowing room for other applications in the background to render / see.
 
-![](/assets/2020-7-16/start.gif){:.small}
+![](assets/2020-7-16/start.gif){:.small}

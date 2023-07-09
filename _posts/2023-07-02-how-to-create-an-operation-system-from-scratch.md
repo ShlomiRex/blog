@@ -35,7 +35,7 @@ Note: the BIOS looks for each device in predefined order in the BIOS menu (boot 
 
 The first 510 bytes of sector 1 are the assembly code. This assembly code will be interacting with BIOS interrupts.
 
-![](/assets/2023-6/Screenshot 2023-06-29 214257.png)
+![](assets/2023-6/Screenshot 2023-06-29 214257.png)
 
 ## Run assembly code in bootloader
 
@@ -78,7 +78,7 @@ nasm bootsector.asm -f bin -o boot.img
 qemu-system-x86_64 boot.img
 ```
 
-![](/assets/2023-6/Screenshot 2023-06-29 211050.png)
+![](assets/2023-6/Screenshot 2023-06-29 211050.png)
 
 ### Print 'Hello World' in assembly
 
@@ -121,7 +121,7 @@ dw 0xAA55                               ;Add boot signature at the end of bootlo
 
 Here is the hexdump of the program:
 
-![](/assets/2023-6/Screenshot 2023-06-29 212153.png)
+![](assets/2023-6/Screenshot 2023-06-29 212153.png)
 
 We can see 'Hello World' appears in the dump, aswell as the last 2 magic bytes.
 
@@ -149,7 +149,7 @@ When we talk about hard drives, to get desired memory block we need to know wher
 
 This is where the CHS comes from. It specifies the cylinder, head and sector of the hard drive. Basically it is a 3D coordinate system.
 
-![](/assets/2023-6/1024px-Hard_drive_geometry_-_English_-_2019-05-30.svg.png)
+![](assets/2023-6/1024px-Hard_drive_geometry_-_English_-_2019-05-30.svg.png)
 
 In a nutshell, cylinder is what physical platter we read from (in blue), head (or track) is the radius of the platter (in yellow), and sector is the angle of the platter (in red).
 
@@ -177,7 +177,7 @@ Now we want to read different sectors of our code. Since 512 bytes isn't enough,
 
 The first sector will be regular bootsector code, and the second sector will be filled with 0xFF bytes. The first sector will read 16 bytes of the second sector and print it to the screen.
 
-![](/assets/2023-6/Screenshot 2023-06-30 at 20.52.48.png)
+![](assets/2023-6/Screenshot 2023-06-30 at 20.52.48.png)
 
 The picture above shows how to read the second sector. In the bootloader sector (first sector) we have the code to read the second sector.
 
@@ -398,7 +398,7 @@ For example of `SS = 0xAAAA` and `SP = 0x0001`, then the effective address of th
 
 Here is an image describing the stack:
 
-![](/assets/2023-6/Screenshot 2023-06-30 180924.png)
+![](assets/2023-6/Screenshot 2023-06-30 180924.png)
 
 This is my code. It first prints the value of `SP` register (`0x6F00`)
 
@@ -488,9 +488,9 @@ GDT must contain:
 
 ### Segment Descriptor Structure
 
-![](/assets/2023-7/Screenshot%202023-07-01%20at%2019.39.49.png)
+![](assets/2023-7/Screenshot%202023-07-01%20at%2019.39.49.png)
 
-![](/assets/2023-7/Screenshot%202023-07-01%20at%2019.41.48.png)
+![](assets/2023-7/Screenshot%202023-07-01%20at%2019.41.48.png)
 
 Both the code segment and data segment have almost the same structure as in the above image.
 
@@ -643,7 +643,7 @@ dw 0xAA55
 
 When we run we see that the letter 'A' is printed on the screen (left-top corner):
 
-![](/assets/2023-7/Screenshot%202023-07-01%20185917.png)
+![](assets/2023-7/Screenshot%202023-07-01%20185917.png)
 
 Because we entered protected mode, we can't use the BIOS interrupts anymore. What I have done in the code is modify the VGA memory directly to print the letter 'A' on the screen. The VGA memory is located at `0xB8000`.
 
@@ -709,7 +709,7 @@ And we get `gcc` source from [here](https://ftp.gnu.org/gnu/gcc/). I chose `gcc 
 
 Put both the binutils and gcc into a folder in Desktop for example and extract:
 
-![](/assets/2023-7/Screenshot%202023-07-02%20at%2016.16.14.png)
+![](assets/2023-7/Screenshot%202023-07-02%20at%2016.16.14.png)
 
 Now create build folder for gcc and build folder to binutils, call them `build-gcc` and `build-binutils`.
 
@@ -731,7 +731,7 @@ Now I cd into `build-binutils` and run: `../binutils-2.40/configure --target=$TA
 
 Now I run: `make` and after it finishes: `make install`:
 
-![](/assets/2023-7/Screenshot%202023-07-02%20at%2016.52.55.png)
+![](assets/2023-7/Screenshot%202023-07-02%20at%2016.52.55.png)
 
 As we can see we compiled the binutils, which includes the linker `i686-elf-ld`.
 
@@ -769,7 +769,7 @@ Now I ran `make all-gcc` and it worked. I continue to run the commands above.
 
 Now `gcc` is installed aswell:
 
-![](/assets/2023-7/Screenshot%202023-07-02%20at%2017.30.07.png)
+![](assets/2023-7/Screenshot%202023-07-02%20at%2017.30.07.png)
 
 ### On Windows
 
@@ -807,7 +807,7 @@ make install-target-libgcc
 
 Final result:
 
-![](/assets/2023-7/Screenshot 2023-07-02 183645.png)
+![](assets/2023-7/Screenshot 2023-07-02 183645.png)
 
 ## Writing our kernel
 
@@ -1157,5 +1157,5 @@ And the makefile is mentioned in the section above.
 
 ## Final result
 
-![](/assets/2023-7/Screenshot%202023-07-02%20at%2021.09.12.png)
+![](assets/2023-7/Screenshot%202023-07-02%20at%2021.09.12.png)
 
