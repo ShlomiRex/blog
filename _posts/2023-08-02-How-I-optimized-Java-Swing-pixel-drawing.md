@@ -178,7 +178,28 @@ After:
 
 ![](assets/2023-8/Screenshot 2023-08-02 205846.png)
 
+## Bonus
 
+For the interested reader, that wonder how I implemented precise clock timing for CPU, PPU clock ticks, I used `ScheduledExecutorService`.
+
+In NES, the CPU clock speed is 1.79MHz, and the PPU clock speed is 5.37MHz (3 times as fast). Both run synchronously. That means each clock cycle of the CPU is 559 nanoseconds, and each clock cycle of the PPU is 186 nanoseconds. I implemented it like this:
+
+```java
+    public void run() {
+        is_running = true;
+
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+        executor.scheduleAtFixedRate(() -> {
+            if(!is_running)
+                executor.shutdown();
+
+            cpu.clock_tick();
+            ppu.clock_tick();
+            ppu.clock_tick();
+            ppu.clock_tick();
+        }, 0, 559, TimeUnit.NANOSECONDS);
+    }
+```
 
 ## Conclusion
 
