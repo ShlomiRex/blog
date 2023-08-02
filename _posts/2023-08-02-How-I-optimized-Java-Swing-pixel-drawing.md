@@ -85,19 +85,19 @@ Here is some of the code I used:
 
 The result:
 
-![](../assets/2023-8/Screenshot 2023-08-02 182657.png)
+![](assets/2023-8/Screenshot 2023-08-02 182657.png)
 
-![](../assets/2023-8/Screenshot 2023-08-02 182811.png)
+![](assets/2023-8/Screenshot 2023-08-02 182811.png)
 
 Basically we completly reduced the time of `AWT-Windows` thread from 22.6% to 3.3%, and reduced the time of `AWT-Event-Queue` by 3%.
 
 If we look at the memory allocation, before:
 
-![](../assets/2023-8/Screenshot 2023-08-02 183110.png)
+![](assets/2023-8/Screenshot 2023-08-02 183110.png)
 
 And after:
 
-![](../assets/2023-8/Screenshot 2023-08-02 183213.png)
+![](assets/2023-8/Screenshot 2023-08-02 183213.png)
 
 We can see that before, we allocated 95% of `AWT-EventQueue` thread in the `draw_tile` function, because of the `fillRect` calls.
 
@@ -105,11 +105,11 @@ After the optimization, we don't allocate anything in `AWT-EventQueue`. All the 
 
 In terms of real-world performance, checking the task manager, before the optimization:
 
-![](../assets/2023-8/Screenshot 2023-08-02 183859.png)
+![](assets/2023-8/Screenshot 2023-08-02 183859.png)
 
 After:
 
-![](../assets/2023-8/Screenshot 2023-08-02 184042.png)
+![](assets/2023-8/Screenshot 2023-08-02 184042.png)
 
 * CPU went down from 7.2% to 4.2%
 * Memory increased from 251MB to 356MB - which is quite surpricing, perhaps because I store the colors twice?
