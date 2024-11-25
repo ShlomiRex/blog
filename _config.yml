@@ -27,6 +27,8 @@ plugins:
   - jekyll-sitemap
   - jekyll-toc
 
+plugins_dir: _plugins
+
 # Custom variables
 owner : "Shlomi Domnenko"
 year : "2023"

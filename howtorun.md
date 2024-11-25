@@ -3,6 +3,8 @@
 Then execute:
 `bundle exec jekyll serve`
 
+Install bundler:
+`gem install bundler`
 
 Install gems:
 `bundle install`

@@ -11,6 +11,11 @@ $header: $conifer !default;
 $blockquote-color: $silver-chalice !default;
 $blockquote-border: $dove-grey !default;
 
+// Define variables here
+:root {
+  --article-width: 1000px;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -277,4 +282,12 @@ strong {
 //Images
 img.small {
   size: 50%;
+}
+
+
+
+
+figcaption {
+  text-align: center;
+  color:gray;
 }
