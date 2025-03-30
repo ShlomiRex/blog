@@ -21,3 +21,7 @@ bundle exec jekyll server --host=0.0.0.0
 ```
 
 or `bundle exec jekyll serve --drafts` to serve the website with `_drafts` posts (posts that are not yet published).
+
+## How to publish
+
+Just commit to main branch
